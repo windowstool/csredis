@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>STM8S105 串口烧录</title>
+<style>
+  :root {
+    --bg: #101613;
+    --panel: #1a2420;
+    --line: #2d3d35;
+    --text: #e7f0ea;
+    --muted: #8aa396;
+    --amber: #e2a84b;
+    --amber-2: #f3d7a1;
+    --ok: #7dcea0;
+    --bad: #e07a5f;
+    --ink: #14201b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background:
+      radial-gradient(1200px 500px at 10% -10%, #24362c 0%, transparent 55%),
+      var(--bg);
+    color: var(--text);
+    font: 15px/1.5 "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif;
+  }
+  header {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: flex-end;
+    padding: 28px 32px 8px;
+  }
+  h1 { margin: 0; font-size: 28px; letter-spacing: 0.02em; }
+  h1 span { color: var(--amber); }
+  .sub { color: var(--muted); margin-top: 4px; }
+  main {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 18px;
+    padding: 18px 32px 32px;
+  }
+  section {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 16px 16px 18px;
+  }
+  h2 { margin: 0 0 12px; font-size: 14px; color: var(--amber-2); font-weight: 650; }
+  label { display: block; color: var(--muted); font-size: 12px; margin: 10px 0 4px; }
+  select, input[type="number"], button, .filebtn {
+    width: 100%;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: #121a17;
+    color: var(--text);
+    padding: 9px 10px;
+    font: inherit;
+  }
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; }
+  button {
+    cursor: pointer;
+    background: #24362c;
+    margin-top: 8px;
+  }
+  button.primary { background: var(--amber); color: var(--ink); font-weight: 700; border-color: transparent; }
+  button.danger { background: #3a2420; color: #ffd0c6; }
+  button:disabled { opacity: 0.45; cursor: wait; }
+  .checks { margin-top: 12px; }
+  .checks label { display: flex; gap: 8px; align-items: center; color: var(--text); font-size: 14px; margin: 6px 0; }
+  .filebox {
+    border: 1px dashed #4d6558;
+    border-radius: 14px;
+    padding: 22px 16px;
+    text-align: center;
+    background: #121a17;
+  }
+  .filebox strong { display: block; margin-bottom: 6px; }
+  .meta { color: var(--muted); min-height: 1.4em; }
+  progress { width: 100%; height: 10px; margin: 12px 0; accent-color: var(--amber); }
+  #log {
+    margin: 0;
+    height: 280px;
+    overflow: auto;
+    background: #0c1210;
+    border-radius: 12px;
+    padding: 12px;
+    white-space: pre-wrap;
+    font: 13px/1.45 ui-monospace, "Cascadia Code", "Sarasa Mono SC", monospace;
+  }
+  .wiring { color: var(--muted); font-size: 13px; margin-top: 12px; }
+  .wiring b { color: var(--text); font-weight: 650; }
+  @media (max-width: 860px) {
+    main { grid-template-columns: 1fr; padding: 12px; }
+    header { padding: 18px 12px 0; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>STM8S105 <span>串口烧录</span></h1>
+    <div class="sub">UART2 reply 模式 · 8N1 · PD5 发送 / PD6 接收</div>
+  </div>
+</header>
+<main>
+  <section>
+    <h2>连接</h2>
+    <label>串口</label>
+    <div class="row">
+      <select id="port"></select>
+      <button id="refresh" style="width:92px;margin-top:0">刷新</button>
+    </div>
+    <label>波特率</label>
+    <select id="baud">
+      <option>9600</option>
+      <option>19200</option>
+      <option>38400</option>
+      <option>57600</option>
+      <option selected>115200</option>
+      <option>230400</option>
+    </select>
+    <label>复位</label>
+    <select id="reset">
+      <option value="manual">手动按下 NRST</option>
+      <option value="dtr">DTR 脉冲</option>
+      <option value="rts">RTS 脉冲</option>
+    </select>
+    <div class="checks">
+      <label><input id="keep" type="checkbox" checked> 烧录后保持串口 bootloader</label>
+      <label><input id="verify" type="checkbox" checked> 烧录后读回校验</label>
+      <label><input id="run" type="checkbox"> 完成后从 0x8000 运行</label>
+      <label><input id="eeprom" type="checkbox"> 同时擦除数据 EEPROM</label>
+    </div>
+    <button id="identify">识别芯片</button>
+    <button id="erase" class="danger">擦除 Flash</button>
+    <p class="wiring">LQFP32：<b>PD5 / 30 脚</b> 接 USB 转 TTL 的 RX，<b>PD6 / 31 脚</b> 接 TX，共地。SWIM 在 <b>PD1 / 26 脚</b>，空片或选项字节 0x55AA 时才会停在 bootloader。</p>
+  </section>
+  <section>
+    <h2>固件</h2>
+    <div class="filebox">
+      <strong id="fname">还没有选择文件</strong>
+      <div class="meta" id="fmeta">支持 Intel HEX、Motorola S19 和 BIN（BIN 从 0x8000 开始）</div>
+      <input id="file" type="file" accept=".hex,.ihx,.s19,.srec,.mot,.bin" hidden>
+      <button class="filebtn" id="pick" style="margin-top:12px">选择固件</button>
+    </div>
+    <button id="write" class="primary">烧录</button>
+    <button id="readback">读回整个 Flash 并下载 HEX</button>
+    <progress id="bar" value="0" max="1"></progress>
+    <pre id="log"></pre>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const logEl = $("log");
+let chosen = null;
+
+function log(line) {
+  logEl.textContent += line + "\n";
+  logEl.scrollTop = logEl.scrollHeight;
+}
+function setBusy(on) {
+  for (const id of ["identify", "erase", "write", "readback", "refresh", "pick"]) {
+    $(id).disabled = on;
+  }
+}
+async function refreshPorts() {
+  const sel = $("port");
+  const prev = sel.value;
+  const res = await fetch("/api/ports");
+  const data = await res.json();
+  sel.innerHTML = "";
+  for (const name of data.ports || []) {
+    const o = document.createElement("option");
+    o.value = name;
+    o.textContent = name;
+    sel.appendChild(o);
+  }
+  if (prev) sel.value = prev;
+  if (!sel.value && sel.options.length) sel.selectedIndex = 0;
+  if (!sel.options.length) log("没有发现串口。");
+}
+function form(extra) {
+  const fd = new FormData();
+  fd.set("port", $("port").value);
+  fd.set("baud", $("baud").value);
+  fd.set("reset", $("reset").value);
+  fd.set("keep", $("keep").checked ? "1" : "0");
+  fd.set("verify", $("verify").checked ? "1" : "0");
+  fd.set("run", $("run").checked ? "1" : "0");
+  fd.set("eeprom", $("eeprom").checked ? "1" : "0");
+  if (extra) extra(fd);
+  return fd;
+}
+async function run(url, fd) {
+  setBusy(true);
+  $("bar").value = 0;
+  try {
+    const res = await fetch(url, { method: "POST", body: fd });
+    if (!res.ok && !res.body) {
+      log("请求失败：" + res.status);
+      return;
+    }
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split("\n");
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        const msg = JSON.parse(line);
+        if (msg.log) log(msg.log);
+        if (typeof msg.progress === "number") $("bar").value = msg.progress;
+        if (msg.error) log("失败：" + msg.error);
+        if (msg.done) log(msg.done);
+        if (msg.hex) download(msg.name || "stm8s105.hex", msg.hex);
+      }
+    }
+  } catch (err) {
+    log("失败：" + err);
+  } finally {
+    setBusy(false);
+  }
+}
+function download(name, text) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+$("refresh").onclick = refreshPorts;
+$("pick").onclick = () => $("file").click();
+$("file").onchange = () => {
+  chosen = $("file").files[0] || null;
+  $("fname").textContent = chosen ? chosen.name : "还没有选择文件";
+  $("fmeta").textContent = chosen ? (chosen.size + " 字节") : "支持 Intel HEX、Motorola S19 和 BIN（BIN 从 0x8000 开始）";
+};
+$("identify").onclick = () => run("/api/identify", form());
+$("erase").onclick = () => {
+  if (!confirm("擦除这颗芯片的全部 Flash？")) return;
+  run("/api/erase", form());
+};
+$("write").onclick = () => {
+  if (!chosen) { log("先选择固件文件。"); return; }
+  run("/api/write", form((fd) => fd.set("file", chosen)));
+};
+$("readback").onclick = () => run("/api/read", form());
+refreshPorts().catch((err) => log(String(err)));
+</script>
+</body>
+</html>

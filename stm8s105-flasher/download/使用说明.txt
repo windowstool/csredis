@@ -1,0 +1,32 @@
+STM8S105 串口烧录软件
+
+芯片：STM8S105K4T6（也识别同系列 32 KB 的 STM8S105K6）
+协议：UART2 reply，8N1
+
+选哪个文件
+- Windows 64 位普通电脑：stm8s105flash-windows-amd64.exe
+- Windows ARM 电脑：stm8s105flash-windows-arm64.exe
+- Mac Apple 芯片（M1/M2/M3/M4）：stm8s105flash-macos-arm64
+- Mac Intel 芯片：stm8s105flash-macos-amd64
+
+怎么打开
+Windows：双击 exe。如果 SmartScreen 拦截，选“仍要运行”。
+Mac：把文件拖出来后，在终端执行：
+  chmod +x stm8s105flash-macos-arm64
+  xattr -d com.apple.quarantine stm8s105flash-macos-arm64
+  ./stm8s105flash-macos-arm64
+Intel Mac 把文件名换成 stm8s105flash-macos-amd64。
+
+打开后会弹出本机浏览器页面。选串口、选 HEX/S19/BIN，点烧录。
+复位方式是“手动按下 NRST”时，开始后按一下板子复位键。
+
+接线（LQFP32）
+- 芯片 PD5 / 30 脚（UART2 发送）接 USB 转 TTL 的 RX
+- 芯片 PD6 / 31 脚（UART2 接收）接 USB 转 TTL 的 TX
+- 共地
+- 波特率 115200
+
+命令行例子
+  stm8s105flash ports
+  stm8s105flash write -port COM3 -file app.hex
+  stm8s105flash write -port /dev/cu.usbserial-110 -file app.hex
